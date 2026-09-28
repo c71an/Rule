@@ -122,7 +122,9 @@ def parse_extra_rules(filepath: str) -> List[str]:
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
         for raw_line in f:
             line = raw_line.strip()
-            if not line or line.startswith("#"):
+            # 彻底去除整行与行内注释（支持 #, //, ;）
+            line = line.split("#")[0].split("//")[0].split(";")[0].strip()
+            if not line:
                 continue
 
             if "," in line:
