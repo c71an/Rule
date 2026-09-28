@@ -5,6 +5,11 @@ on:
   schedule:
     # 每周一北京时间早晨 06:00 (UTC 每周日 22:00) 自动同步上游规则
     - cron: '0 22 * * 0'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'rule/geosite/**'
 
 jobs:
   convert-rules:

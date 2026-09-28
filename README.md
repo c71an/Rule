@@ -22,15 +22,17 @@
 
 ---
 
-## 如何在 GitHub 页面手动运行编译
+## 自动化与手动运行说明
 
-1. 打开本项目在 GitHub 的仓库页面。
-2. 点击仓库导航栏的 **Actions** 选项卡。
-3. 在左侧列表中选择 **Build MRS Rulesets** 工作流。
-4. 点击右侧的 **Run workflow** 下拉按钮，选择 `main` 分支并点击绿色的 **Run workflow**。
-5. 稍等 1~2 分钟，GitHub Actions 编译完成后会自动将生成的 `.mrs` 文件提交并推送到本仓库的 `rule/geosite/` 目录下。
+工作流支持以下触发方式：
 
-> **提示**：除了手动触发外，工作流默认设置了每周定时任务（北京时间每周一早晨 06:00），会自动与上游规则保持同步。
+1. **提交代码自动触发 (Push)**：向 `main` 分支提交并推送新的 commit 时（如修改了 `rules.json` 或配置代码），将自动触发 GitHub Actions 重新编译并更新 `.mrs`。
+2. **页面手动触发 (Workflow Dispatch)**：
+   - 打开项目的 GitHub 仓库页面，点击 **Actions** 选项卡。
+   - 在左侧选择 **Build MRS Rulesets**，点击右侧 **Run workflow** 按钮即可一键运行。
+3. **每周定时同步 (Schedule)**：工作流默认在每周一早晨 06:00（北京时间）自动与上游规则同步。
+
+编译完成后，GitHub Actions 会自动将最新生成的 `.mrs` 文件推送到本仓库的 `rule/geosite/` 目录下。
 
 ---
 
