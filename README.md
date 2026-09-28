@@ -1,32 +1,42 @@
-# Mihomo MRS 分流规则集生成器
+# Mihomo MRS 分流规则集自动转换
 
-[![Convert Upstream Rules to MRS](https://github.com/${{ github.repository }}/actions/workflows/convert.yml/badge.svg)](https://github.com/${{ github.repository }}/actions/workflows/convert.yml)
+本项目利用 **GitHub Actions** 自动将上游分流规则（基于 [blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script)）转换为 **Mihomo (Clash.Meta)** 原生二进制规则集格式（`.mrs`）。
 
-本项目用于自动将上游分流规则（基于 [blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script)）转换为 **Mihomo (Clash.Meta)** 原生二进制规则集格式（`.mrs`）。
+**所有规则集均由 GitHub Actions 在云端环境编译生成并自动推送到 `rule/geosite/` 目录，无需本地编译。**
 
-在转换过程中，转换脚本会**严格过滤并仅保留 `DOMAIN` 与 `DOMAIN-SUFFIX` 规则**，去除无用的 IP-CIDR、USER-AGENT、PROCESS-NAME 等类型，生成体积极小、加载速度极快、内存开销极低的 Geosite 二进制规则文件。
+在转换过程中，工作流会**严格过滤并仅保留 `DOMAIN` 与 `DOMAIN-SUFFIX` 规则**，剔除 IP-CIDR、USER-AGENT、PROCESS-NAME 等无关规则，生成加载速度极快、内存开销极低的 Geosite 二进制规则集。
 
 ---
 
 ## 规则列表与输出映射
 
-所有编译生成的二进制规则文件均存放在 [`rule/geosite`](./rule/geosite) 目录下：
+在 GitHub Actions 运行后，生成的 `.mrs` 文件存放在 [`rule/geosite`](./rule/geosite) 目录下：
 
-| 上游规则名称 (Upstream) | 生成文件 (Output) | 说明 | 规则类型 |
+| 上游规则名称 (Upstream) | 生成文件 (Output) | 说明 | 过滤保留规则 |
 | :--- | :--- | :--- | :--- |
-| **Apple** | [`rule/geosite/Apple.mrs`](./rule/geosite/Apple.mrs) | Apple 旗下各项服务域名 | DOMAIN, DOMAIN-SUFFIX |
-| **Binance** | [`rule/geosite/Binance.mrs`](./rule/geosite/Binance.mrs) | Binance 币安相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
-| **Google** | [`rule/geosite/Google.mrs`](./rule/geosite/Google.mrs) | Google 旗下各项服务域名 | DOMAIN, DOMAIN-SUFFIX |
-| **Microsoft** | [`rule/geosite/Microsoft.mrs`](./rule/geosite/Microsoft.mrs) | Microsoft 微软相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
-| **ChinaMax** | [`rule/geosite/cn.mrs`](./rule/geosite/cn.mrs) | 中国大陆境内域名集合 | DOMAIN, DOMAIN-SUFFIX |
+| **Apple** | `rule/geosite/Apple.mrs` | Apple 旗下各项服务域名 | DOMAIN, DOMAIN-SUFFIX |
+| **Binance** | `rule/geosite/Binance.mrs` | Binance 币安相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
+| **Google** | `rule/geosite/Google.mrs` | Google 旗下各项服务域名 | DOMAIN, DOMAIN-SUFFIX |
+| **Microsoft** | `rule/geosite/Microsoft.mrs` | Microsoft 微软相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
+| **ChinaMax** | `rule/geosite/cn.mrs` | 中国大陆全量境内域名集合 | DOMAIN, DOMAIN-SUFFIX |
 
 ---
 
-## 在 Mihomo / Clash.Meta 中使用
+## 如何在 GitHub 页面手动运行编译
 
-### 1. 远程订阅方式 (推荐)
+1. 打开本项目在 GitHub 的仓库页面。
+2. 点击仓库导航栏的 **Actions** 选项卡。
+3. 在左侧列表中选择 **Build MRS Rulesets** 工作流。
+4. 点击右侧的 **Run workflow** 下拉按钮，选择 `main` 分支并点击绿色的 **Run workflow**。
+5. 稍等 1~2 分钟，GitHub Actions 编译完成后会自动将生成的 `.mrs` 文件提交并推送到本仓库的 `rule/geosite/` 目录下。
 
-在 Mihomo 配置文件的 `rule-providers` 中配置，并将 format 设置为 `mrs`：
+> **提示**：除了手动触发外，工作流默认设置了每日定时任务（北京时间每天早晨 06:00），会自动与上游规则保持同步。
+
+---
+
+## 在 Mihomo / Clash.Meta 中引用
+
+### 远程订阅配置示例
 
 ```yaml
 rule-providers:
@@ -79,67 +89,11 @@ rules:
   - MATCH,PROXY
 ```
 
-> **提示**：如果在国内网络环境下直连 GitHub Raw 较慢，可以使用 jsDelivr CDN 加速地址：  
-> `https://fastly.jsdelivr.net/gh/<你的用户名>/<你的仓库名>@main/rule/geosite/Apple.mrs`
-
 ---
 
-### 2. 本地文件方式
+## 自定义修改或添加规则
 
-若已将 `.mrs` 文件下载到本地配置目录：
-
-```yaml
-rule-providers:
-  geosite-cn:
-    type: file
-    behavior: domain
-    format: mrs
-    path: ./ruleset/cn.mrs
-```
-
----
-
-## 运行与维护
-
-### 方式一：GitHub Actions 手动运行 (Workflow Dispatch)
-
-1. 打开项目的 GitHub 仓库页面。
-2. 点击顶部的 **Actions** 标签页。
-3. 在左侧列表中选择 **Convert Upstream Rules to MRS**。
-4. 点击右侧的 **Run workflow** 按钮，选择分支并点击绿色的 **Run workflow**。
-5. 转换完成后，Action 会自动将生成的 `.mrs` 文件提交并推送到仓库的 `rule/geosite/` 目录中。
-
-> 此外，工作流默认设置了每日定时任务（UTC 22:00 / 北京时间 06:00），会自动与上游规则保持同步。
-
----
-
-### 方式二：本地运行
-
-本项目采用纯标准库编写转换脚本，无需安装额外的 Python 第三方包。
-
-1. **克隆仓库**：
-   ```bash
-   git clone https://github.com/<你的用户名>/<你的仓库名>.git
-   cd <你的仓库名>
-   ```
-
-2. **运行转换**：
-   ```bash
-   python convert.py
-   ```
-   > 脚本会自动检测操作系统与架构，若本地没有安装 `mihomo`，会自动拉取对应平台的最新版 `mihomo` 并完成编译转换。
-
-3. **指定参数运行**（可选）：
-   ```bash
-   # 自定义输出目录或指定外部 mihomo 路径
-   python convert.py --config rules.json --output-dir rule/geosite --mihomo-bin /usr/local/bin/mihomo
-   ```
-
----
-
-## 自定义添加新规则
-
-如需添加更多规则，只需在 [`rules.json`](./rules.json) 中添加相应配置项即可：
+如需新增规则，只需在 [`rules.json`](./rules.json) 中添加相应配置项并提交即可：
 
 ```json
 [
@@ -147,11 +101,6 @@ rule-providers:
     "upstream": "Telegram",
     "target": "Telegram",
     "description": "Telegram 域名规则"
-  },
-  {
-    "upstream": "OpenAI",
-    "target": "OpenAI",
-    "description": "OpenAI 域名规则"
   }
 ]
 ```
@@ -159,11 +108,4 @@ rule-providers:
 - **`upstream`**: 上游规则分类名称（对应 `blackmatrix7/ios_rule_script` 中的规则目录名）。
 - **`target`**: 编译输出的 `.mrs` 文件名（例如 `"cn"` 会生成 `cn.mrs`）。
 - **`file`** *(可选)*: 指定上游文件名（默认优先探测 `{upstream}_All.list`，不存在则使用 `{upstream}.list`）。
-- **`url`** *(可选)*: 自定义任意第三方规则列表的完整 URL。
-
----
-
-## 鸣谢
-
-- 规则数据源：[blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script)
-- 内核转换器：[MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)
+- **`url`** *(可选)*: 自定义任意规则源的完整 URL。

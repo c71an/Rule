@@ -1,26 +1,13 @@
-name: Convert Upstream Rules to MRS
+name: Build MRS Rulesets
 
 on:
   workflow_dispatch:
-    inputs:
-      force_push:
-        description: 'Force push changes even if minimal'
-        required: false
-        type: boolean
-        default: false
   schedule:
-    # 每天北京时间早晨 6:00 (UTC 22:00) 自动同步更新
+    # 每天北京时间早晨 06:00 (UTC 22:00) 自动同步上游规则
     - cron: '0 22 * * *'
-  push:
-    branches:
-      - main
-    paths:
-      - 'rules.json'
-      - 'convert.py'
-      - '.github/workflows/convert.yml'
 
 jobs:
-  build-and-convert:
+  convert-rules:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -36,43 +23,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Cache Mihomo binary
-        id: cache-mihomo
-        uses: actions/cache@v4
-        with:
-          path: mihomo
-          key: mihomo-v1.19.31-linux-amd64
-
-      - name: Download Mihomo (if not cached)
-        if: steps.cache-mihomo.outputs.cache-hit != 'true'
+      - name: Install Mihomo
         run: |
-          echo "Downloading Mihomo v1.19.31..."
-          curl -sSL "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/mihomo-linux-amd64-compatible-v1.19.31.gz" | gzip -d > mihomo
-          chmod +x mihomo
+          echo "Downloading latest Mihomo binary..."
+          MIHOMO_URL="https://github.com/MetaCubeX/mihomo/releases/download/v1.19.31/mihomo-linux-amd64-compatible-v1.19.31.gz"
+          curl -sSL "$MIHOMO_URL" | gzip -d > /usr/local/bin/mihomo
+          chmod +x /usr/local/bin/mihomo
+          mihomo -v
 
-      - name: Run rule conversion
+      - name: Run Rule Conversion
         run: |
-          chmod +x mihomo
-          python convert.py --mihomo-bin ./mihomo --output-dir rule/geosite
+          python convert.py --mihomo-bin /usr/local/bin/mihomo --output-dir rule/geosite
 
-      - name: Verify generated MRS files
-        run: |
-          echo "Checking generated .mrs files..."
-          ls -lh rule/geosite/
-          test -s rule/geosite/Apple.mrs
-          test -s rule/geosite/Binance.mrs
-          test -s rule/geosite/Google.mrs
-          test -s rule/geosite/Microsoft.mrs
-          test -s rule/geosite/cn.mrs
-
-      - name: Upload MRS Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: geosite-mrs-rules
-          path: rule/geosite/*.mrs
-          retention-days: 7
-
-      - name: Commit and push changes
+      - name: Commit and push generated MRS files
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -82,7 +45,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes detected in rule/geosite."
           else
-            echo "Changes detected, committing and pushing..."
-            git commit -m "chore(ruleset): update geosite mrs rulesets [skip ci]"
+            echo "Changes detected, committing and pushing to repository..."
+            git commit -m "chore(ruleset): update geosite mrs rulesets via github actions [skip ci]"
             git push
           fi

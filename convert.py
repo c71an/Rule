@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-规则集转换工具：
+规则集转换工具（供 GitHub Actions 运行）：
 从上游（如 blackmatrix7/ios_rule_script）抓取分流规则，
 仅保留 DOMAIN 与 DOMAIN-SUFFIX 规则，
-并利用 Mihomo 内置转换器编译为高性能二进制 .mrs 规则集。
+调用 Mihomo 内置转换器编译为高性能二进制 .mrs 规则集并存入 rule/geosite/ 目录。
 """
 
 import os
 import sys
 import json
-import gzip
 import shutil
-import zipfile
-import platform
 import argparse
 import subprocess
 import urllib.request
@@ -25,13 +22,12 @@ UPSTREAM_BASE_URL = (
 )
 DEFAULT_OUTPUT_DIR = os.path.join("rule", "geosite")
 DEFAULT_CONFIG_FILE = "rules.json"
-MIHOMO_VERSION = "v1.19.31"
 
 
 def download_with_retry(url: str, max_retries: int = 3, timeout: int = 30) -> bytes:
     """带重试机制的 HTTP 下载"""
     headers = {
-        "User-Agent": "Mozilla/5.0 (RuleConverter/1.0; +https://github.com)"
+        "User-Agent": "Mozilla/5.0 (GitHubActions/RuleConverter; +https://github.com)"
     }
     req = urllib.request.Request(url, headers=headers)
     last_err = None
@@ -44,85 +40,6 @@ def download_with_retry(url: str, max_retries: int = 3, timeout: int = 30) -> by
             if attempt < max_retries:
                 print(f"    [!] 下载重试 ({attempt}/{max_retries}) {url}: {e}")
     raise RuntimeError(f"下载失败 ({url}): {last_err}")
-
-
-def get_mihomo_executable(custom_path: Optional[str] = None) -> str:
-    """获取可用的 mihomo 可执行文件路径，若本地未找到则自动下载对应平台的二进制"""
-    if custom_path and os.path.isfile(custom_path):
-        return custom_path
-
-    # 1. 优先查找环境变量或系统 PATH
-    env_bin = os.getenv("MIHOMO_BIN")
-    if env_bin and os.path.isfile(env_bin):
-        return env_bin
-
-    which_path = shutil.which("mihomo")
-    if which_path:
-        return which_path
-
-    # 2. 检查当前目录下是否有 mihomo 或 mihomo.exe
-    local_names = ["mihomo", "mihomo.exe"]
-    for name in local_names:
-        if os.path.isfile(name):
-            return os.path.abspath(name)
-
-    # 3. 自动下载对应平台的 mihomo
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    print(f"[*] 系统未检测到 mihomo 可执行文件，正在自动为 {system}-{machine} 下载...")
-
-    is_windows = system == "windows"
-    is_darwin = system == "darwin"
-    is_linux = system == "linux"
-
-    target_bin_name = "mihomo.exe" if is_windows else "mihomo"
-
-    if is_windows:
-        asset_name = f"mihomo-windows-amd64-compatible-{MIHOMO_VERSION}.zip"
-    elif is_darwin:
-        if "arm" in machine or "aarch64" in machine:
-            asset_name = f"mihomo-darwin-arm64-{MIHOMO_VERSION}.gz"
-        else:
-            asset_name = f"mihomo-darwin-amd64-compatible-{MIHOMO_VERSION}.gz"
-    elif is_linux:
-        if "arm" in machine or "aarch64" in machine:
-            asset_name = f"mihomo-linux-arm64-{MIHOMO_VERSION}.gz"
-        else:
-            asset_name = f"mihomo-linux-amd64-compatible-{MIHOMO_VERSION}.gz"
-    else:
-        raise RuntimeError(f"暂不支持的操作系统架构: {system}-{machine}")
-
-    download_url = (
-        f"https://github.com/MetaCubeX/mihomo/releases/download/{MIHOMO_VERSION}/{asset_name}"
-    )
-    print(f"    下载地址: {download_url}")
-    data = download_with_retry(download_url, max_retries=3, timeout=60)
-
-    temp_archive = os.path.join(".", "mihomo_download_tmp")
-    with open(temp_archive, "wb") as f:
-        f.write(data)
-
-    if asset_name.endswith(".zip"):
-        with zipfile.ZipFile(temp_archive, "r") as zf:
-            for item in zf.namelist():
-                if item.endswith(".exe") or item == "mihomo":
-                    extracted = zf.extract(item, ".")
-                    if extracted != target_bin_name:
-                        shutil.move(extracted, target_bin_name)
-                    break
-    elif asset_name.endswith(".gz"):
-        with gzip.open(temp_archive, "rb") as gz:
-            with open(target_bin_name, "wb") as out_f:
-                shutil.copyfileobj(gz, out_f)
-        os.chmod(target_bin_name, 0o755)
-
-    if os.path.exists(temp_archive):
-        os.remove(temp_archive)
-
-    if not os.path.isfile(target_bin_name):
-        raise RuntimeError("解压 mihomo 二进制失败")
-
-    return os.path.abspath(target_bin_name)
 
 
 def fetch_upstream_rule_content(
@@ -228,18 +145,25 @@ def main():
     parser = argparse.ArgumentParser(description="分流规则转换工具 (Surge list -> Mihomo .mrs)")
     parser.add_argument("--config", default=DEFAULT_CONFIG_FILE, help="规则配置文件路径")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="输出目录 (默认 rule/geosite)")
-    parser.add_argument("--mihomo-bin", default=None, help="自定义 mihomo 二进制路径")
+    parser.add_argument("--mihomo-bin", default="mihomo", help="Mihomo 二进制执行文件路径")
     args = parser.parse_args()
 
     if not os.path.exists(args.config):
         print(f"[!] 找不到配置文件: {args.config}")
         sys.exit(1)
 
+    # 检查 mihomo 二进制是否有效
+    mihomo_path = shutil.which(args.mihomo_bin) or (
+        os.path.abspath(args.mihomo_bin) if os.path.isfile(args.mihomo_bin) else None
+    )
+    if not mihomo_path:
+        print(f"[!] 未找到指定的 Mihomo 可执行文件: {args.mihomo_bin}")
+        sys.exit(1)
+
     with open(args.config, "r", encoding="utf-8") as f:
         rule_configs: List[Dict[str, str]] = json.load(f)
 
-    mihomo_bin = get_mihomo_executable(args.mihomo_bin)
-    print(f"[*] 使用 Mihomo 编译器: {mihomo_bin}")
+    print(f"[*] 使用 Mihomo 编译器: {mihomo_path}")
     print(f"[*] 输出目录: {os.path.abspath(args.output_dir)}\n")
 
     temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".tmp_build")
@@ -273,7 +197,7 @@ def main():
                     summary_records.append((target_mrs_filename, 0, "0 B", "无有效规则跳过"))
                     continue
 
-                success = convert_to_mrs(mihomo_bin, filtered_rules, target_mrs_path, temp_dir=temp_dir)
+                success = convert_to_mrs(mihomo_path, filtered_rules, target_mrs_path, temp_dir=temp_dir)
                 if success and os.path.isfile(target_mrs_path):
                     file_size = os.path.getsize(target_mrs_path)
                     formatted_size = format_size(file_size)
@@ -288,7 +212,6 @@ def main():
                 summary_records.append((target_mrs_filename, 0, "-", f"错误: {e}"))
 
     finally:
-        # 清理临时文件
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
