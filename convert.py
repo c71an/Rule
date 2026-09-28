@@ -145,6 +145,26 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024):.2f} MB"
 
 
+def clean_obsolete_rules(output_dir: str, valid_targets: set) -> List[str]:
+    """清理 output_dir 中未在配置列表里的过时 .mrs 文件"""
+    removed = []
+    if not os.path.exists(output_dir):
+        return removed
+
+    for fname in os.listdir(output_dir):
+        if fname.endswith(".mrs"):
+            target_name = os.path.splitext(fname)[0]
+            if target_name not in valid_targets:
+                fpath = os.path.join(output_dir, fname)
+                try:
+                    os.remove(fpath)
+                    removed.append(fname)
+                    print(f"[*] 已自动清理过时规则文件: {fname}")
+                except Exception as e:
+                    print(f"[!] 清理过时文件失败 {fname}: {e}")
+    return removed
+
+
 def main():
     parser = argparse.ArgumentParser(description="分流规则转换工具 (Surge list -> Mihomo .mrs)")
     parser.add_argument("--config", default=DEFAULT_CONFIG_FILE, help="规则配置文件路径")
@@ -167,8 +187,21 @@ def main():
     with open(args.config, "r", encoding="utf-8") as f:
         rule_configs: List[Dict[str, str]] = json.load(f)
 
+    # 收集当前合法的目标名称
+    valid_targets = {
+        item.get("target") or item.get("upstream")
+        for item in rule_configs
+        if item.get("target") or item.get("upstream")
+    }
+
     print(f"[*] 使用 Mihomo 编译器: {mihomo_path}")
-    print(f"[*] 输出目录: {os.path.abspath(args.output_dir)}\n")
+    print(f"[*] 输出目录: {os.path.abspath(args.output_dir)}")
+    print(f"[*] 当前配置目标规则: {sorted(valid_targets)}\n")
+
+    # 自动清理已从配置中移除的旧 .mrs 文件
+    cleaned = clean_obsolete_rules(args.output_dir, valid_targets)
+    if cleaned:
+        print(f"[*] 共清理 {len(cleaned)} 个过时规则文件: {', '.join(cleaned)}\n")
 
     temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".tmp_build")
     os.makedirs(temp_dir, exist_ok=True)

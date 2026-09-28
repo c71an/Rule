@@ -18,7 +18,6 @@
 | **Binance** | `rule/geosite/Binance.mrs` | Binance 币安相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
 | **Google** | `rule/geosite/Google.mrs` | Google 旗下各项服务域名 | DOMAIN, DOMAIN-SUFFIX |
 | **Microsoft** | `rule/geosite/Microsoft.mrs` | Microsoft 微软相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
-| **ChinaMax** | `rule/geosite/cn.mrs` | 中国大陆全量境内域名集合 | DOMAIN, DOMAIN-SUFFIX |
 
 ---
 
@@ -74,20 +73,11 @@ rule-providers:
     path: ./ruleset/Microsoft.mrs
     interval: 86400
 
-  geosite-cn:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/<你的用户名>/<你的仓库名>/main/rule/geosite/cn.mrs"
-    path: ./ruleset/cn.mrs
-    interval: 86400
-
 rules:
   - RULE-SET,geosite-binance,DIRECT
   - RULE-SET,geosite-apple,DIRECT
   - RULE-SET,geosite-microsoft,DIRECT
   - RULE-SET,geosite-google,PROXY
-  - RULE-SET,geosite-cn,DIRECT
   - MATCH,PROXY
 ```
 
