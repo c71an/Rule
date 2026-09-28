@@ -38,7 +38,7 @@ jobs:
 
       - name: Run Rule Conversion
         run: |
-          python convert.py --mihomo-bin /usr/local/bin/mihomo --output-dir rule/geosite
+          python convert.py --config config/rules.json --mihomo-bin /usr/local/bin/mihomo --output-dir rule/geosite
 
       - name: Commit and push generated MRS files
         run: |

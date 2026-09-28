@@ -1,0 +1,6 @@
+#幼儿园
++.7kid.com
+#SteamCN
+steamcdn-a.akamaihd.net
++.cm.steampowered.com
++.steamserver.net

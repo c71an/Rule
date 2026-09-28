@@ -18,5 +18,11 @@
     "upstream": "Microsoft",
     "target": "Microsoft",
     "description": "Microsoft 微软服务域名分流规则"
+  },
+  {
+    "upstream": "ChinaMax",
+    "target": "cn",
+    "extra": "cn-extra.txt",
+    "description": "中国大陆域名分流规则合集 (ChinaMax)"
   }
 ]

@@ -18,6 +18,7 @@
 | **Binance** | `rule/geosite/Binance.mrs` | Binance 币安相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
 | **Google** | `rule/geosite/Google.mrs` | Google 旗下各项服务域名 | DOMAIN, DOMAIN-SUFFIX |
 | **Microsoft** | `rule/geosite/Microsoft.mrs` | Microsoft 微软相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
+| **ChinaMax** | `rule/geosite/cn.mrs` | 中国大陆全量境内域名集合 (已自动合并自定义规则) | DOMAIN, DOMAIN-SUFFIX |
 
 ---
 
@@ -73,31 +74,58 @@ rule-providers:
     path: ./ruleset/Microsoft.mrs
     interval: 86400
 
+  geosite-cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/<你的用户名>/<你的仓库名>/main/rule/geosite/cn.mrs"
+    path: ./ruleset/cn.mrs
+    interval: 86400
+
 rules:
   - RULE-SET,geosite-binance,DIRECT
   - RULE-SET,geosite-apple,DIRECT
   - RULE-SET,geosite-microsoft,DIRECT
   - RULE-SET,geosite-google,PROXY
+  - RULE-SET,geosite-cn,DIRECT
   - MATCH,PROXY
 ```
 
 ---
 
-## 自定义修改或添加规则
+## 配置文件与自定义规则合并
 
-如需新增规则，只需在 [`rules.json`](./rules.json) 中添加相应配置项并提交即可：
+### 1. 配置文件管理
+
+所有规则配置均存放在 `config/` 目录下：
+- [`config/rules.json`](./config/rules.json)：定义上游规则与目标 `.mrs` 的映射。
+- [`config/cn-extra.txt`](./config/cn-extra.txt)：用户自定义补充的国内域名规则，在编译时会自动合并至 `cn.mrs`。
+
+### 2. 自定义规则文件格式
+
+在 `config/cn-extra.txt` 中支持多种格式，支持注释（`#` 开头）：
+```text
+# 自定义国内域名
++.7kid.com
+steamcdn-a.akamaihd.net
+DOMAIN-SUFFIX,example.cn
+```
+
+### 3. 在 `config/rules.json` 中配置
 
 ```json
 [
   {
-    "upstream": "Telegram",
-    "target": "Telegram",
-    "description": "Telegram 域名规则"
+    "upstream": "ChinaMax",
+    "target": "cn",
+    "extra": "cn-extra.txt",
+    "description": "中国大陆域名分流规则合集 (ChinaMax)"
   }
 ]
 ```
 
 - **`upstream`**: 上游规则分类名称（对应 `blackmatrix7/ios_rule_script` 中的规则目录名）。
 - **`target`**: 编译输出的 `.mrs` 文件名（例如 `"cn"` 会生成 `cn.mrs`）。
+- **`extra`** *(可选)*: 本地自定义规则文件名（如 `"cn-extra.txt"`），自动合并入该规则集。
 - **`file`** *(可选)*: 指定上游文件名（默认优先探测 `{upstream}_All.list`，不存在则使用 `{upstream}.list`）。
 - **`url`** *(可选)*: 自定义任意规则源的完整 URL。
