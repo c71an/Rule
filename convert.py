@@ -153,7 +153,9 @@ def find_extra_file(extra_setting: Optional[str], target_name: str, config_dir: 
         candidates.append(os.path.join(config_dir, extra_setting))
         candidates.append(os.path.join(".", extra_setting))
 
-    # 默认按约定自动探测：config/{target}-extra.txt 或 {target}-extra.txt
+    # 默认按约定自动探测：config/{target}-extra.list 或 config/{target}-extra.txt
+    candidates.append(os.path.join(config_dir, f"{target_name}-extra.list"))
+    candidates.append(f"{target_name}-extra.list")
     candidates.append(os.path.join(config_dir, f"{target_name}-extra.txt"))
     candidates.append(f"{target_name}-extra.txt")
 

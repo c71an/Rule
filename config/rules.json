@@ -22,7 +22,7 @@
   {
     "upstream": "ChinaMax",
     "target": "cn",
-    "extra": "cn-extra.txt",
+    "extra": "cn-extra.list",
     "description": "中国大陆域名分流规则合集 (ChinaMax)"
   }
 ]

@@ -99,11 +99,11 @@ rules:
 
 所有规则配置均存放在 `config/` 目录下：
 - [`config/rules.json`](./config/rules.json)：定义上游规则与目标 `.mrs` 的映射。
-- [`config/cn-extra.txt`](./config/cn-extra.txt)：用户自定义补充的国内域名规则，在编译时会自动合并至 `cn.mrs`。
+- [`config/cn-extra.list`](./config/cn-extra.list)：用户自定义补充的国内域名规则，在编译时会自动合并至 `cn.mrs`。
 
 ### 2. 自定义规则文件格式
 
-在 `config/cn-extra.txt` 中支持多种格式，支持注释（`#` 开头）：
+在 `config/cn-extra.list` 中支持多种格式，支持注释（`#` 开头）：
 ```text
 # 自定义国内域名
 +.7kid.com
@@ -118,7 +118,7 @@ DOMAIN-SUFFIX,example.cn
   {
     "upstream": "ChinaMax",
     "target": "cn",
-    "extra": "cn-extra.txt",
+    "extra": "cn-extra.list",
     "description": "中国大陆域名分流规则合集 (ChinaMax)"
   }
 ]
@@ -126,6 +126,6 @@ DOMAIN-SUFFIX,example.cn
 
 - **`upstream`**: 上游规则分类名称（对应 `blackmatrix7/ios_rule_script` 中的规则目录名）。
 - **`target`**: 编译输出的 `.mrs` 文件名（例如 `"cn"` 会生成 `cn.mrs`）。
-- **`extra`** *(可选)*: 本地自定义规则文件名（如 `"cn-extra.txt"`），自动合并入该规则集。
+- **`extra`** *(可选)*: 本地自定义规则文件名（如 `"cn-extra.list"`），自动合并入该规则集。
 - **`file`** *(可选)*: 指定上游文件名（默认优先探测 `{upstream}_All.list`，不存在则使用 `{upstream}.list`）。
 - **`url`** *(可选)*: 自定义任意规则源的完整 URL。
