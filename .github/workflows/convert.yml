@@ -3,8 +3,8 @@ name: Build MRS Rulesets
 on:
   workflow_dispatch:
   schedule:
-    # 每天北京时间早晨 06:00 (UTC 22:00) 自动同步上游规则
-    - cron: '0 22 * * *'
+    # 每周一北京时间早晨 06:00 (UTC 每周日 22:00) 自动同步上游规则
+    - cron: '0 22 * * 0'
 
 jobs:
   convert-rules:
