@@ -131,6 +131,7 @@ DOMAIN-SUFFIX,example.cn
     {
       "upstream": "ChinaMax",
       "target": "cn",
+      "filter": "DOMAIN,DOMAIN-SUFFIX",
       "extra": "cn-extra.list"
     }
   ],
@@ -144,7 +145,7 @@ DOMAIN-SUFFIX,example.cn
 }
 ```
 
-- **`domain` 分组**：属于域名类分流规则，默认提取 `DOMAIN` 与 `DOMAIN-SUFFIX` 并自动转为紧凑 Trie 树。
+- **`domain` 分组**：属于域名类分流规则，配置 `"filter": "DOMAIN,DOMAIN-SUFFIX"` 精准提取域名与后缀并自动转为紧凑 Trie 树。
 - **`ipcidr` 分组**：属于 IP 网段分流规则，可通过 `filter` 精准控制提取内容：
   - `"filter": "IP-CIDR"`：仅提取纯 IPv4 网段（默认）；
   - `"filter": "IP-CIDR,IP-CIDR6"`：同时提取 IPv4 与 IPv6 双栈网段。

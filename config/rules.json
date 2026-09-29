@@ -2,23 +2,28 @@
   "domain": [
     {
       "upstream": "Apple",
-      "target": "Apple"
+      "target": "Apple",
+      "filter": "DOMAIN,DOMAIN-SUFFIX"
     },
     {
       "upstream": "Binance",
-      "target": "Binance"
+      "target": "Binance",
+      "filter": "DOMAIN,DOMAIN-SUFFIX"
     },
     {
       "upstream": "Google",
-      "target": "Google"
+      "target": "Google",
+      "filter": "DOMAIN,DOMAIN-SUFFIX"
     },
     {
       "upstream": "Microsoft",
-      "target": "Microsoft"
+      "target": "Microsoft",
+      "filter": "DOMAIN,DOMAIN-SUFFIX"
     },
     {
       "upstream": "ChinaMax",
       "target": "cn",
+      "filter": "DOMAIN,DOMAIN-SUFFIX",
       "extra": "cn-extra.list"
     }
   ],
