@@ -131,17 +131,14 @@ DOMAIN-SUFFIX,example.cn
     {
       "upstream": "ChinaMax",
       "target": "cn",
-      "extra": "cn-extra.list",
-      "description": "中国大陆域名分流规则合集 (ChinaMax)"
+      "extra": "cn-extra.list"
     }
   ],
   "ipcidr": [
     {
       "upstream": "ChinaMax",
       "target": "cn_ip",
-      "filter": "IP-CIDR",
-      "file": "ChinaMax.list",
-      "description": "中国大陆 IPv4 网段规则 (ChinaMax IP-CIDR)"
+      "filter": "IP-CIDR"
     }
   ]
 }

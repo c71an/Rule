@@ -379,7 +379,8 @@ def main():
             target_mrs_filename = f"{target}.mrs"
             target_mrs_path = os.path.join(out_dir, target_mrs_filename)
 
-            print(f"[{idx}/{len(rule_configs)}] 处理 ({behavior}) [{filter_desc}]: {upstream} -> {target_mrs_path} ({desc})")
+            desc_str = f" ({desc})" if desc else ""
+            print(f"[{idx}/{len(rule_configs)}] 处理 ({behavior}) [{filter_desc}]: {upstream} -> {target_mrs_path}{desc_str}")
 
             try:
                 content, source_desc = fetch_upstream_rule_content(
