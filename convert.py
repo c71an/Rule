@@ -79,19 +79,16 @@ def fetch_upstream_rule_content(
     raise FileNotFoundError(f"无法在上游找到规则 {rule_name} 的任何候选文件: {candidate_files}")
 
 
-def parse_filter_config(filter_val: Optional[Union[str, List[str]]], default_behavior: str = "domain") -> Set[str]:
+def parse_filter_config(filter_val: Optional[Union[str, List[str]]]) -> Set[str]:
     """
-    解析 filter 配置项，返回规范化大写的规则集合：
-    - 未指定时根据所在分组行为决定默认值：
-        - domain: {'DOMAIN', 'DOMAIN-SUFFIX'}
-        - ipcidr: {'IP-CIDR'} (纯 IPv4)
-    - "IP-CIDR": 仅 IPv4
-    - "IP-CIDR,IP-CIDR6": IPv4 和 IPv6 双栈
+    解析 filter 配置项，返回规范化大写的规则集合。
+    配置在 rules.json 的 filter 参数中指定，例如：
+    - "DOMAIN,DOMAIN-SUFFIX"
+    - "IP-CIDR"
+    - "IP-CIDR,IP-CIDR6"
     """
     if not filter_val:
-        if default_behavior == "ipcidr":
-            return {"IP-CIDR"}
-        return {"DOMAIN", "DOMAIN-SUFFIX"}
+        return set()
     if isinstance(filter_val, list):
         return {str(x).strip().upper() for x in filter_val if str(x).strip()}
     return {x.strip().upper() for x in str(filter_val).split(",") if x.strip()}
@@ -370,9 +367,7 @@ def main():
             out_dir = item.get("dir") or args.output_dir
             desc = item.get("description", "")
 
-            # 解析所属分组行为并推导 filter 与 behavior
-            default_beh = (explicit_behavior or "domain").strip().lower()
-            filter_types = parse_filter_config(filter_val, default_behavior=default_beh)
+            filter_types = parse_filter_config(filter_val)
             behavior = determine_behavior(filter_types, explicit_behavior)
             filter_desc = ",".join(sorted(filter_types))
 
