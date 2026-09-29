@@ -135,7 +135,11 @@ DOMAIN-SUFFIX,example.cn
 ```
 
 - **`upstream`**: 上游规则分类名称（对应 `blackmatrix7/ios_rule_script` 中的规则目录名）。
-- **`target`**: 编译输出的 `.mrs` 文件名（例如 `"cn"` 会生成 `cn.mrs`）。
-- **`extra`** *(可选)*: 本地自定义规则文件名（如 `"cn-extra.list"`），自动合并入该规则集。
+- **`target`**: 编译输出的 `.mrs` 文件名（例如 `"cn"` 会生成 `cn.mrs`，`"cn_ip"` 会生成 `cn_ip.mrs`）。
+- **`filter`** *(可选)*: 指定提取的规则类型（自动推导 Mihomo 的 `behavior` 类型）：
+  - 默认未填时：`"DOMAIN,DOMAIN-SUFFIX"`（推导为 `domain` 类型，并自动转为紧凑 Trie 格式）
+  - `"IP-CIDR"`：仅提取纯 IPv4 网段（推导为 `ipcidr` 类型）
+  - `"IP-CIDR,IP-CIDR6"`：同时提取 IPv4 与 IPv6 网段（推导为 `ipcidr` 类型）
+- **`extra`** *(可选)*: 本地自定义补充规则文件名（如 `"cn-extra.list"`），自动与上游规则去重合并。
 - **`file`** *(可选)*: 指定上游文件名（默认优先探测 `{upstream}_All.list`，不存在则使用 `{upstream}.list`）。
 - **`url`** *(可选)*: 自定义任意规则源的完整 URL。

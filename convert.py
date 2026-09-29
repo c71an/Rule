@@ -3,8 +3,9 @@
 """
 规则集转换工具（供 GitHub Actions 运行）：
 从上游（如 blackmatrix7/ios_rule_script）抓取分流规则，
-支持 domain 行为（保留 DOMAIN 与 DOMAIN-SUFFIX，转为紧凑格式）
-以及 ipcidr 行为（提取 IP-CIDR 与 IP-CIDR6），
+支持通过 filter 字段灵活指定提取类型：
+  - 域名类：DOMAIN, DOMAIN-SUFFIX（自动转为 Mihomo 原生 Trie 紧凑前缀格式）
+  - IP 类：IP-CIDR（仅 IPv4）或 IP-CIDR,IP-CIDR6（IPv4 和 IPv6 双栈）
 支持自动合并用户自定义的额外规则（如 config/*-extra.list），
 调用 Mihomo 内置转换器编译为高性能二进制 .mrs 规则集。
 """
@@ -17,7 +18,7 @@ import argparse
 import subprocess
 import urllib.request
 import urllib.error
-from typing import List, Dict, Optional, Tuple, Set
+from typing import List, Dict, Optional, Tuple, Set, Union
 
 UPSTREAM_BASE_URL = (
     "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge"
@@ -78,15 +79,43 @@ def fetch_upstream_rule_content(
     raise FileNotFoundError(f"无法在上游找到规则 {rule_name} 的任何候选文件: {candidate_files}")
 
 
-def filter_domain_rules(content: str) -> List[str]:
+def parse_filter_config(filter_val: Optional[Union[str, List[str]]]) -> Set[str]:
     """
-    仅保留 DOMAIN 与 DOMAIN-SUFFIX 规则，并转换为 Mihomo 原生高性能紧凑格式：
-    - DOMAIN-SUFFIX,example.com -> +.example.com
-    - DOMAIN,example.com -> example.com
-    Mihomo 编译原生紧凑格式时会采用极致压缩的 Trie 树存储，体积减少约 50%！
-    去除重复项并按字母升序排序。
+    解析 filter 配置项，返回规范化大写的规则集合：
+    - 未指定时默认: {'DOMAIN', 'DOMAIN-SUFFIX'}
+    - "IP-CIDR": 仅 IPv4
+    - "IP-CIDR,IP-CIDR6": IPv4 和 IPv6
+    """
+    if not filter_val:
+        return {"DOMAIN", "DOMAIN-SUFFIX"}
+    if isinstance(filter_val, list):
+        return {str(x).strip().upper() for x in filter_val if str(x).strip()}
+    return {x.strip().upper() for x in str(filter_val).split(",") if x.strip()}
+
+
+def determine_behavior(filter_types: Set[str], explicit_behavior: Optional[str] = None) -> str:
+    """根据 filter_types 自动推导 Mihomo 的 behavior（domain 或 ipcidr）"""
+    if explicit_behavior:
+        return explicit_behavior.strip().lower()
+    if any("IP" in f or "CIDR" in f for f in filter_types):
+        return "ipcidr"
+    return "domain"
+
+
+def filter_rules(content: str, filter_types: Set[str], behavior: str) -> List[str]:
+    """
+    根据 filter_types 与 behavior 对规则内容进行精准过滤与标准化：
+    - domain 行为：
+        - DOMAIN-SUFFIX,example.com -> +.example.com
+        - DOMAIN,example.com -> example.com
+    - ipcidr 行为：
+        - IP-CIDR,1.0.1.0/24,no-resolve -> 1.0.1.0/24
+        - 当且仅当 filter 包含 IP-CIDR6 时才提取 IPv6，否则严格只保留 IPv4
     """
     rules_set = set()
+    include_v4 = "IP-CIDR" in filter_types
+    include_v6 = "IP-CIDR6" in filter_types
+
     for raw_line in content.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -95,90 +124,61 @@ def filter_domain_rules(content: str) -> List[str]:
         parts = line.split(",")
         if len(parts) >= 2:
             rule_type = parts[0].strip().upper()
-            domain = parts[1].strip()
+            payload = parts[1].strip()
 
-            if rule_type == "DOMAIN-SUFFIX" and domain:
-                rules_set.add(f"+.{domain}")
-            elif rule_type == "DOMAIN" and domain:
-                rules_set.add(domain)
+            if behavior == "ipcidr":
+                if rule_type == "IP-CIDR" and include_v4 and payload:
+                    if ":" not in payload:
+                        rules_set.add(payload)
+                elif rule_type == "IP-CIDR6" and include_v6 and payload:
+                    rules_set.add(payload)
+            else:
+                if rule_type in filter_types and payload:
+                    if rule_type == "DOMAIN-SUFFIX":
+                        rules_set.add(f"+.{payload}")
+                    elif rule_type == "DOMAIN":
+                        rules_set.add(payload)
+        else:
+            # 处理纯规则行（兼容 extra 规则或非逗号格式）
+            if behavior == "ipcidr":
+                if "/" in line:
+                    is_v6 = ":" in line
+                    if is_v6 and include_v6:
+                        rules_set.add(line)
+                    elif not is_v6 and include_v4:
+                        rules_set.add(line)
+            else:
+                if line.startswith("+."):
+                    if "DOMAIN-SUFFIX" in filter_types:
+                        rules_set.add(line)
+                elif line.startswith("."):
+                    if "DOMAIN-SUFFIX" in filter_types:
+                        rules_set.add(f"+{line}")
+                else:
+                    if "DOMAIN" in filter_types:
+                        rules_set.add(line)
 
     return sorted(rules_set)
 
 
-def filter_ipcidr_rules(content: str, include_ipv6: bool = False) -> List[str]:
+def parse_extra_rules(filepath: str, filter_types: Set[str], behavior: str) -> List[str]:
     """
-    仅提取 IP-CIDR (纯 IPv4) 规则，严格排除 IP-CIDR6。
-    输出为 Mihomo ipcidr 行为所需的纯 IPv4 CIDR 网段。
-    去除 IP-CIDR 前缀及 no-resolve 等修饰。
+    解析本地额外的自定义规则文件（如 config/cn-extra.list）。
+    与主过滤器保持完全一致的类型与注释处理。
     """
-    cidr_set = set()
-    for raw_line in content.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-
-        parts = line.split(",")
-        if len(parts) >= 2:
-            rule_type = parts[0].strip().upper()
-            cidr = parts[1].strip()
-            # 严格保留 IP-CIDR，排除 IP-CIDR6 和包含冒号的 IPv6
-            if rule_type == "IP-CIDR" and cidr and ":" not in cidr:
-                cidr_set.add(cidr)
-            elif include_ipv6 and rule_type == "IP-CIDR6" and cidr:
-                cidr_set.add(cidr)
-        else:
-            if "/" in line:
-                if ":" not in line:
-                    cidr_set.add(line)
-                elif include_ipv6:
-                    cidr_set.add(line)
-
-    return sorted(cidr_set)
-
-
-def parse_extra_rules(filepath: str, behavior: str = "domain") -> List[str]:
-    """
-    解析本地额外的自定义规则文件（如 config/cn-extra.list 或 config/cn_ip-extra.list）。
-    根据 behavior（domain 或 ipcidr）自动提取并标准化规则。
-    """
-    rules = []
     if not os.path.isfile(filepath):
-        return rules
+        return []
 
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        clean_lines = []
         for raw_line in f:
             line = raw_line.strip()
             # 彻底去除整行与行内注释（支持 #, //, ;）
             line = line.split("#")[0].split("//")[0].split(";")[0].strip()
-            if not line:
-                continue
+            if line:
+                clean_lines.append(line)
 
-            if behavior == "ipcidr":
-                if "," in line:
-                    parts = line.split(",")
-                    if len(parts) >= 2 and parts[0].strip().upper() == "IP-CIDR":
-                        cidr = parts[1].strip()
-                        if ":" not in cidr:
-                            rules.append(cidr)
-                elif "/" in line and ":" not in line:
-                    rules.append(line)
-            else:
-                if "," in line:
-                    parts = line.split(",")
-                    if len(parts) >= 2:
-                        t, d = parts[0].strip().upper(), parts[1].strip()
-                        if t == "DOMAIN-SUFFIX" and d:
-                            rules.append(f"+.{d}")
-                        elif t == "DOMAIN" and d:
-                            rules.append(d)
-                else:
-                    if line.startswith("+."):
-                        rules.append(line)
-                    elif line.startswith("."):
-                        rules.append(f"+{line}")
-                    else:
-                        rules.append(line)
-    return rules
+    return filter_rules("\n".join(clean_lines), filter_types, behavior)
 
 
 def find_extra_file(extra_setting: Optional[str], target_name: str, config_dir: str) -> Optional[str]:
@@ -332,33 +332,34 @@ def main():
             custom_url = item.get("url")
             specified_file = item.get("file")
             extra_setting = item.get("extra")
-            behavior = item.get("behavior", "domain").strip().lower()
-            include_ipv6 = item.get("include_ipv6", False)
+            filter_val = item.get("filter")
+            explicit_behavior = item.get("behavior")
             out_dir = item.get("dir") or args.output_dir
             desc = item.get("description", "")
+
+            # 解析 filter 与推断 behavior
+            filter_types = parse_filter_config(filter_val)
+            behavior = determine_behavior(filter_types, explicit_behavior)
+            filter_desc = ",".join(sorted(filter_types))
 
             target_mrs_filename = f"{target}.mrs"
             target_mrs_path = os.path.join(out_dir, target_mrs_filename)
 
-            print(f"[{idx}/{len(rule_configs)}] 处理 ({behavior}): {upstream} -> {target_mrs_path} ({desc})")
+            print(f"[{idx}/{len(rule_configs)}] 处理 ({behavior}) [{filter_desc}]: {upstream} -> {target_mrs_path} ({desc})")
 
             try:
                 content, source_desc = fetch_upstream_rule_content(
                     upstream, specified_file=specified_file, custom_url=custom_url
                 )
 
-                if behavior == "ipcidr":
-                    filtered_rules = filter_ipcidr_rules(content, include_ipv6=include_ipv6)
-                else:
-                    filtered_rules = filter_domain_rules(content)
-
+                filtered_rules = filter_rules(content, filter_types, behavior)
                 upstream_count = len(filtered_rules)
 
                 # 检查并解析自定义额外规则
                 extra_file = find_extra_file(extra_setting, target, config_dir)
                 extra_rules = []
                 if extra_file:
-                    extra_rules = parse_extra_rules(extra_file, behavior=behavior)
+                    extra_rules = parse_extra_rules(extra_file, filter_types, behavior)
                     print(f"    [+] 合并额外自定义规则: {len(extra_rules)} 条 (来源: {extra_file})")
 
                 # 合并上游规则与自定义额外规则
@@ -369,7 +370,7 @@ def main():
 
                 if rule_count == 0:
                     print("    [!] 警告: 未提取到任何有效规则，跳过生成")
-                    summary_records.append((target_mrs_filename, behavior, 0, "0 B", "无有效规则跳过"))
+                    summary_records.append((target_mrs_filename, behavior, filter_desc, 0, "0 B", "无有效规则跳过"))
                     continue
 
                 success = convert_to_mrs(mihomo_path, behavior, final_rules, target_mrs_path, temp_dir=temp_dir)
@@ -377,26 +378,26 @@ def main():
                     file_size = os.path.getsize(target_mrs_path)
                     formatted_size = format_size(file_size)
                     print(f"    [√] 成功生成: {target_mrs_path} ({formatted_size})\n")
-                    summary_records.append((target_mrs_filename, behavior, rule_count, formatted_size, "成功"))
+                    summary_records.append((target_mrs_filename, behavior, filter_desc, rule_count, formatted_size, "成功"))
                 else:
                     print(f"    [x] 生成失败: {target_mrs_path}\n")
-                    summary_records.append((target_mrs_filename, behavior, rule_count, "-", "编译失败"))
+                    summary_records.append((target_mrs_filename, behavior, filter_desc, rule_count, "-", "编译失败"))
 
             except Exception as e:
                 print(f"    [x] 发生异常: {e}\n")
-                summary_records.append((target_mrs_filename, behavior, 0, "-", f"错误: {e}"))
+                summary_records.append((target_mrs_filename, behavior, filter_desc, 0, "-", f"错误: {e}"))
 
     finally:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     # 打印汇总表
-    print("=" * 75)
-    print(f"{'目标文件':<18} | {'类型':<8} | {'规则数量':<10} | {'文件大小':<12} | {'状态'}")
-    print("-" * 75)
-    for target_file, beh, count, size, status in summary_records:
-        print(f"{target_file:<18} | {beh:<8} | {count:<10} | {size:<12} | {status}")
-    print("=" * 75)
+    print("=" * 85)
+    print(f"{'目标文件':<16} | {'类型':<8} | {'过滤器 (filter)':<22} | {'规则数量':<10} | {'文件大小':<10} | {'状态'}")
+    print("-" * 85)
+    for target_file, beh, f_desc, count, size, status in summary_records:
+        print(f"{target_file:<16} | {beh:<8} | {f_desc:<22} | {count:<10} | {size:<10} | {status}")
+    print("=" * 85)
 
 
 if __name__ == "__main__":

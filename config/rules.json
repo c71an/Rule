@@ -28,8 +28,8 @@
   {
     "upstream": "ChinaMax",
     "target": "cn_ip",
-    "behavior": "ipcidr",
+    "filter": "IP-CIDR",
     "file": "ChinaMax.list",
-    "description": "中国大陆 IP 网段规则 (ChinaMax IP-CIDR)"
+    "description": "中国大陆 IPv4 网段规则 (ChinaMax IP-CIDR)"
   }
 ]
