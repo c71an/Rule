@@ -24,5 +24,12 @@
     "target": "cn",
     "extra": "cn-extra.list",
     "description": "中国大陆域名分流规则合集 (ChinaMax)"
+  },
+  {
+    "upstream": "ChinaMax",
+    "target": "cn_ip",
+    "behavior": "ipcidr",
+    "file": "ChinaMax.list",
+    "description": "中国大陆 IP 网段规则 (ChinaMax IP-CIDR)"
   }
 ]

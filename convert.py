@@ -3,9 +3,10 @@
 """
 规则集转换工具（供 GitHub Actions 运行）：
 从上游（如 blackmatrix7/ios_rule_script）抓取分流规则，
-仅保留 DOMAIN 与 DOMAIN-SUFFIX 规则，
-支持自动合并用户自定义的额外规则（如 config/cn-extra.txt），
-调用 Mihomo 内置转换器编译为高性能二进制 .mrs 规则集并存入 rule/geosite/ 目录。
+支持 domain 行为（保留 DOMAIN 与 DOMAIN-SUFFIX，转为紧凑格式）
+以及 ipcidr 行为（提取 IP-CIDR 与 IP-CIDR6），
+支持自动合并用户自定义的额外规则（如 config/*-extra.list），
+调用 Mihomo 内置转换器编译为高性能二进制 .mrs 规则集。
 """
 
 import os
@@ -52,7 +53,7 @@ def fetch_upstream_rule_content(
     """
     抓取上游规则内容。
     对于 Surge 目录规则：
-    若有 _All.list 则优先使用 _All.list（包含完整域名），否则使用 .list。
+    若指定了特定文件则优先使用，否则若有 _All.list 优先使用 _All.list，否则使用 .list。
     返回 (内容字符串, 使用的来源文件名或URL)
     """
     if custom_url:
@@ -104,16 +105,35 @@ def filter_domain_rules(content: str) -> List[str]:
     return sorted(rules_set)
 
 
-def parse_extra_rules(filepath: str) -> List[str]:
+def filter_ipcidr_rules(content: str, include_ipv6: bool = True) -> List[str]:
     """
-    解析本地额外的自定义规则文件（如 config/cn-extra.txt）。
-    支持格式：
-    - +.example.com
-    - example.com
-    - .example.com
-    - DOMAIN-SUFFIX,example.com
-    - DOMAIN,example.com
-    自动过滤注释和空行。
+    提取 IP-CIDR 与 IP-CIDR6 规则，输出为 Mihomo ipcidr 行为所需的纯 CIDR 网段。
+    去除 IP-CIDR/IP-CIDR6 前缀及 no-resolve 等修饰。
+    """
+    valid_types = ("IP-CIDR", "IP-CIDR6") if include_ipv6 else ("IP-CIDR",)
+    cidr_set = set()
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        parts = line.split(",")
+        if len(parts) >= 2:
+            rule_type = parts[0].strip().upper()
+            cidr = parts[1].strip()
+            if rule_type in valid_types and cidr:
+                cidr_set.add(cidr)
+        else:
+            if "/" in line:
+                cidr_set.add(line)
+
+    return sorted(cidr_set)
+
+
+def parse_extra_rules(filepath: str, behavior: str = "domain") -> List[str]:
+    """
+    解析本地额外的自定义规则文件（如 config/cn-extra.list 或 config/cn_ip-extra.list）。
+    根据 behavior（domain 或 ipcidr）自动提取并标准化规则。
     """
     rules = []
     if not os.path.isfile(filepath):
@@ -127,21 +147,29 @@ def parse_extra_rules(filepath: str) -> List[str]:
             if not line:
                 continue
 
-            if "," in line:
-                parts = line.split(",")
-                if len(parts) >= 2:
-                    t, d = parts[0].strip().upper(), parts[1].strip()
-                    if t == "DOMAIN-SUFFIX" and d:
-                        rules.append(f"+.{d}")
-                    elif t == "DOMAIN" and d:
-                        rules.append(d)
+            if behavior == "ipcidr":
+                if "," in line:
+                    parts = line.split(",")
+                    if len(parts) >= 2 and parts[0].strip().upper() in ("IP-CIDR", "IP-CIDR6"):
+                        rules.append(parts[1].strip())
+                elif "/" in line:
+                    rules.append(line)
             else:
-                if line.startswith("+."):
-                    rules.append(line)
-                elif line.startswith("."):
-                    rules.append(f"+{line}")
+                if "," in line:
+                    parts = line.split(",")
+                    if len(parts) >= 2:
+                        t, d = parts[0].strip().upper(), parts[1].strip()
+                        if t == "DOMAIN-SUFFIX" and d:
+                            rules.append(f"+.{d}")
+                        elif t == "DOMAIN" and d:
+                            rules.append(d)
                 else:
-                    rules.append(line)
+                    if line.startswith("+."):
+                        rules.append(line)
+                    elif line.startswith("."):
+                        rules.append(f"+{line}")
+                    else:
+                        rules.append(line)
     return rules
 
 
@@ -167,6 +195,7 @@ def find_extra_file(extra_setting: Optional[str], target_name: str, config_dir: 
 
 def convert_to_mrs(
     mihomo_bin: str,
+    behavior: str,
     rules: List[str],
     output_path: str,
     temp_dir: str = ".tmp"
@@ -184,7 +213,7 @@ def convert_to_mrs(
     cmd = [
         mihomo_bin,
         "convert-ruleset",
-        "domain",
+        behavior,
         "text",
         temp_txt_path,
         output_path
@@ -210,23 +239,22 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024):.2f} MB"
 
 
-def clean_obsolete_rules(output_dir: str, valid_targets: Set[str]) -> List[str]:
-    """清理 output_dir 中未在配置列表里的过时 .mrs 文件"""
+def clean_obsolete_rules(tracked_directories: Set[str], valid_target_files: Set[str]) -> List[str]:
+    """清理输出目录中未在配置列表里的过时 .mrs 文件"""
     removed = []
-    if not os.path.exists(output_dir):
-        return removed
-
-    for fname in os.listdir(output_dir):
-        if fname.endswith(".mrs"):
-            target_name = os.path.splitext(fname)[0]
-            if target_name not in valid_targets:
-                fpath = os.path.join(output_dir, fname)
-                try:
-                    os.remove(fpath)
-                    removed.append(fname)
-                    print(f"[*] 已自动清理过时规则文件: {fname}")
-                except Exception as e:
-                    print(f"[!] 清理过时文件失败 {fname}: {e}")
+    for out_dir in tracked_directories:
+        if not os.path.exists(out_dir):
+            continue
+        for fname in os.listdir(out_dir):
+            if fname.endswith(".mrs"):
+                fpath = os.path.abspath(os.path.join(out_dir, fname))
+                if fpath not in valid_target_files:
+                    try:
+                        os.remove(fpath)
+                        removed.append(fname)
+                        print(f"[*] 已自动清理过时规则文件: {fpath}")
+                    except Exception as e:
+                        print(f"[!] 清理过时文件失败 {fpath}: {e}")
     return removed
 
 
@@ -246,7 +274,7 @@ def resolve_config_path(custom_path: Optional[str]) -> str:
 def main():
     parser = argparse.ArgumentParser(description="分流规则转换工具 (Surge list -> Mihomo .mrs)")
     parser.add_argument("--config", default=None, help="规则配置文件路径 (默认自动寻找 config/rules.json 或 rules.json)")
-    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="输出目录 (默认 rule/geosite)")
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="默认输出目录 (默认 rule/geosite)")
     parser.add_argument("--mihomo-bin", default="mihomo", help="Mihomo 二进制执行文件路径")
     args = parser.parse_args()
 
@@ -264,20 +292,23 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         rule_configs: List[Dict[str, str]] = json.load(f)
 
-    # 收集当前合法的目标名称
-    valid_targets = {
-        item.get("target") or item.get("upstream")
-        for item in rule_configs
-        if item.get("target") or item.get("upstream")
-    }
+    # 收集当前合法的目标文件与涉及的输出目录
+    valid_target_files = set()
+    tracked_directories = set()
+
+    for item in rule_configs:
+        target = item.get("target") or item.get("upstream")
+        out_dir = item.get("dir") or args.output_dir
+        tracked_directories.add(os.path.abspath(out_dir))
+        valid_target_files.add(os.path.abspath(os.path.join(out_dir, f"{target}.mrs")))
 
     print(f"[*] 配置文件: {config_path}")
     print(f"[*] 使用 Mihomo 编译器: {mihomo_path}")
-    print(f"[*] 输出目录: {os.path.abspath(args.output_dir)}")
-    print(f"[*] 当前配置目标规则: {sorted(valid_targets)}\n")
+    print(f"[*] 默认输出目录: {os.path.abspath(args.output_dir)}")
+    print(f"[*] 当前配置目标规则: {[item.get('target') for item in rule_configs]}\n")
 
     # 自动清理已从配置中移除的旧 .mrs 文件
-    cleaned = clean_obsolete_rules(args.output_dir, valid_targets)
+    cleaned = clean_obsolete_rules(tracked_directories, valid_target_files)
     if cleaned:
         print(f"[*] 共清理 {len(cleaned)} 个过时规则文件: {', '.join(cleaned)}\n")
 
@@ -293,25 +324,33 @@ def main():
             custom_url = item.get("url")
             specified_file = item.get("file")
             extra_setting = item.get("extra")
+            behavior = item.get("behavior", "domain").strip().lower()
+            include_ipv6 = item.get("include_ipv6", True)
+            out_dir = item.get("dir") or args.output_dir
             desc = item.get("description", "")
 
             target_mrs_filename = f"{target}.mrs"
-            target_mrs_path = os.path.join(args.output_dir, target_mrs_filename)
+            target_mrs_path = os.path.join(out_dir, target_mrs_filename)
 
-            print(f"[{idx}/{len(rule_configs)}] 处理: {upstream} -> {target_mrs_filename} ({desc})")
+            print(f"[{idx}/{len(rule_configs)}] 处理 ({behavior}): {upstream} -> {target_mrs_path} ({desc})")
 
             try:
                 content, source_desc = fetch_upstream_rule_content(
                     upstream, specified_file=specified_file, custom_url=custom_url
                 )
-                filtered_rules = filter_domain_rules(content)
+
+                if behavior == "ipcidr":
+                    filtered_rules = filter_ipcidr_rules(content, include_ipv6=include_ipv6)
+                else:
+                    filtered_rules = filter_domain_rules(content)
+
                 upstream_count = len(filtered_rules)
 
                 # 检查并解析自定义额外规则
                 extra_file = find_extra_file(extra_setting, target, config_dir)
                 extra_rules = []
                 if extra_file:
-                    extra_rules = parse_extra_rules(extra_file)
+                    extra_rules = parse_extra_rules(extra_file, behavior=behavior)
                     print(f"    [+] 合并额外自定义规则: {len(extra_rules)} 条 (来源: {extra_file})")
 
                 # 合并上游规则与自定义额外规则
@@ -321,35 +360,35 @@ def main():
                 print(f"    来源: {source_desc} | 上游规则: {upstream_count} 条 | 最终去重合并总规则数: {rule_count}")
 
                 if rule_count == 0:
-                    print("    [!] 警告: 未提取到任何有效 DOMAIN 或 DOMAIN-SUFFIX 规则，跳过生成")
-                    summary_records.append((target_mrs_filename, 0, "0 B", "无有效规则跳过"))
+                    print("    [!] 警告: 未提取到任何有效规则，跳过生成")
+                    summary_records.append((target_mrs_filename, behavior, 0, "0 B", "无有效规则跳过"))
                     continue
 
-                success = convert_to_mrs(mihomo_path, final_rules, target_mrs_path, temp_dir=temp_dir)
+                success = convert_to_mrs(mihomo_path, behavior, final_rules, target_mrs_path, temp_dir=temp_dir)
                 if success and os.path.isfile(target_mrs_path):
                     file_size = os.path.getsize(target_mrs_path)
                     formatted_size = format_size(file_size)
                     print(f"    [√] 成功生成: {target_mrs_path} ({formatted_size})\n")
-                    summary_records.append((target_mrs_filename, rule_count, formatted_size, "成功"))
+                    summary_records.append((target_mrs_filename, behavior, rule_count, formatted_size, "成功"))
                 else:
                     print(f"    [x] 生成失败: {target_mrs_path}\n")
-                    summary_records.append((target_mrs_filename, rule_count, "-", "编译失败"))
+                    summary_records.append((target_mrs_filename, behavior, rule_count, "-", "编译失败"))
 
             except Exception as e:
                 print(f"    [x] 发生异常: {e}\n")
-                summary_records.append((target_mrs_filename, 0, "-", f"错误: {e}"))
+                summary_records.append((target_mrs_filename, behavior, 0, "-", f"错误: {e}"))
 
     finally:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     # 打印汇总表
-    print("=" * 65)
-    print(f"{'目标文件':<20} | {'规则数量':<10} | {'文件大小':<12} | {'状态'}")
-    print("-" * 65)
-    for target_file, count, size, status in summary_records:
-        print(f"{target_file:<20} | {count:<10} | {size:<12} | {status}")
-    print("=" * 65)
+    print("=" * 75)
+    print(f"{'目标文件':<18} | {'类型':<8} | {'规则数量':<10} | {'文件大小':<12} | {'状态'}")
+    print("-" * 75)
+    for target_file, beh, count, size, status in summary_records:
+        print(f"{target_file:<18} | {beh:<8} | {count:<10} | {size:<12} | {status}")
+    print("=" * 75)
 
 
 if __name__ == "__main__":

@@ -18,7 +18,8 @@
 | **Binance** | `rule/geosite/Binance.mrs` | Binance 币安相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
 | **Google** | `rule/geosite/Google.mrs` | Google 旗下各项服务域名 | DOMAIN, DOMAIN-SUFFIX |
 | **Microsoft** | `rule/geosite/Microsoft.mrs` | Microsoft 微软相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
-| **ChinaMax** | `rule/geosite/cn.mrs` | 中国大陆全量境内域名集合 (已自动合并自定义规则) | DOMAIN, DOMAIN-SUFFIX |
+| **ChinaMax** | `rule/geosite/cn.mrs` | 中国大陆全量境内域名集合 (已自动合并自定义规则) | DOMAIN, DOMAIN-SUFFIX (behavior: domain) |
+| **ChinaMax** | `rule/geosite/cn_ip.mrs` | 中国大陆全量 IP 网段规则 (提取自 ChinaMax.list) | IP-CIDR, IP-CIDR6 (behavior: ipcidr) |
 
 ---
 
@@ -82,12 +83,21 @@ rule-providers:
     path: ./ruleset/cn.mrs
     interval: 86400
 
+  geoip-cn:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://raw.githubusercontent.com/<你的用户名>/<你的仓库名>/main/rule/geosite/cn_ip.mrs"
+    path: ./ruleset/cn_ip.mrs
+    interval: 86400
+
 rules:
   - RULE-SET,geosite-binance,DIRECT
   - RULE-SET,geosite-apple,DIRECT
   - RULE-SET,geosite-microsoft,DIRECT
   - RULE-SET,geosite-google,PROXY
   - RULE-SET,geosite-cn,DIRECT
+  - RULE-SET,geoip-cn,DIRECT,no-resolve
   - MATCH,PROXY
 ```
 
