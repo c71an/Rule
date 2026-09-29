@@ -23,7 +23,7 @@ from typing import List, Dict, Optional, Tuple, Set, Union
 UPSTREAM_BASE_URL = (
     "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge"
 )
-DEFAULT_OUTPUT_DIR = os.path.join("rule", "geosite")
+DEFAULT_OUTPUT_DIR = "rule"
 DEFAULT_CONFIG_FILES = [
     os.path.join("config", "rules.json"),
     "rules.json"
@@ -257,7 +257,7 @@ def resolve_config_path(custom_path: Optional[str]) -> str:
 def main():
     parser = argparse.ArgumentParser(description="分流规则转换工具 (Surge list -> Mihomo .mrs)")
     parser.add_argument("--config", default=None, help="规则配置文件路径 (默认自动寻找 config/rules.json 或 rules.json)")
-    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="默认输出目录 (默认 rule/geosite)")
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="默认输出目录 (默认 rule)")
     parser.add_argument("--mihomo-bin", default="mihomo", help="Mihomo 二进制执行文件路径")
     args = parser.parse_args()
 

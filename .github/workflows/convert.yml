@@ -9,7 +9,7 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'rule/geosite/**'
+      - 'rule/**'
 
 jobs:
   convert-rules:
@@ -38,19 +38,19 @@ jobs:
 
       - name: Run Rule Conversion
         run: |
-          python convert.py --config config/rules.json --mihomo-bin /usr/local/bin/mihomo --output-dir rule/geosite
+          python convert.py --config config/rules.json --mihomo-bin /usr/local/bin/mihomo --output-dir rule
 
       - name: Commit and push generated MRS files
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          git add -A rule/geosite/
+          git add -A rule/
           
           if git diff --staged --quiet; then
-            echo "No changes detected in rule/geosite."
+            echo "No changes detected in rule."
           else
             echo "Changes detected, committing and pushing to repository..."
-            git commit -m "chore(ruleset): update geosite mrs rulesets via github actions [skip ci]"
+            git commit -m "chore(ruleset): update mrs rulesets via github actions [skip ci]"
             git push
           fi
