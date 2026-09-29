@@ -19,7 +19,7 @@
 | **Google** | `rule/geosite/Google.mrs` | Google 旗下各项服务域名 | DOMAIN, DOMAIN-SUFFIX |
 | **Microsoft** | `rule/geosite/Microsoft.mrs` | Microsoft 微软相关服务域名 | DOMAIN, DOMAIN-SUFFIX |
 | **ChinaMax** | `rule/geosite/cn.mrs` | 中国大陆全量境内域名集合 (已自动合并自定义规则) | DOMAIN, DOMAIN-SUFFIX (behavior: domain) |
-| **ChinaMax** | `rule/geosite/cn_ip.mrs` | 中国大陆全量 IP 网段规则 (提取自 ChinaMax.list) | IP-CIDR, IP-CIDR6 (behavior: ipcidr) |
+| **ChinaMax** | `rule/geosite/cn_ip.mrs` | 中国大陆全量 IPv4 网段规则 (提取自 ChinaMax.list) | 纯 IPv4 IP-CIDR (排除 IPv6) (behavior: ipcidr) |
 
 ---
 

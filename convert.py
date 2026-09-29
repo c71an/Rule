@@ -105,12 +105,12 @@ def filter_domain_rules(content: str) -> List[str]:
     return sorted(rules_set)
 
 
-def filter_ipcidr_rules(content: str, include_ipv6: bool = True) -> List[str]:
+def filter_ipcidr_rules(content: str, include_ipv6: bool = False) -> List[str]:
     """
-    提取 IP-CIDR 与 IP-CIDR6 规则，输出为 Mihomo ipcidr 行为所需的纯 CIDR 网段。
-    去除 IP-CIDR/IP-CIDR6 前缀及 no-resolve 等修饰。
+    仅提取 IP-CIDR (纯 IPv4) 规则，严格排除 IP-CIDR6。
+    输出为 Mihomo ipcidr 行为所需的纯 IPv4 CIDR 网段。
+    去除 IP-CIDR 前缀及 no-resolve 等修饰。
     """
-    valid_types = ("IP-CIDR", "IP-CIDR6") if include_ipv6 else ("IP-CIDR",)
     cidr_set = set()
     for raw_line in content.splitlines():
         line = raw_line.strip()
@@ -121,11 +121,17 @@ def filter_ipcidr_rules(content: str, include_ipv6: bool = True) -> List[str]:
         if len(parts) >= 2:
             rule_type = parts[0].strip().upper()
             cidr = parts[1].strip()
-            if rule_type in valid_types and cidr:
+            # 严格保留 IP-CIDR，排除 IP-CIDR6 和包含冒号的 IPv6
+            if rule_type == "IP-CIDR" and cidr and ":" not in cidr:
+                cidr_set.add(cidr)
+            elif include_ipv6 and rule_type == "IP-CIDR6" and cidr:
                 cidr_set.add(cidr)
         else:
             if "/" in line:
-                cidr_set.add(line)
+                if ":" not in line:
+                    cidr_set.add(line)
+                elif include_ipv6:
+                    cidr_set.add(line)
 
     return sorted(cidr_set)
 
@@ -150,9 +156,11 @@ def parse_extra_rules(filepath: str, behavior: str = "domain") -> List[str]:
             if behavior == "ipcidr":
                 if "," in line:
                     parts = line.split(",")
-                    if len(parts) >= 2 and parts[0].strip().upper() in ("IP-CIDR", "IP-CIDR6"):
-                        rules.append(parts[1].strip())
-                elif "/" in line:
+                    if len(parts) >= 2 and parts[0].strip().upper() == "IP-CIDR":
+                        cidr = parts[1].strip()
+                        if ":" not in cidr:
+                            rules.append(cidr)
+                elif "/" in line and ":" not in line:
                     rules.append(line)
             else:
                 if "," in line:
@@ -325,7 +333,7 @@ def main():
             specified_file = item.get("file")
             extra_setting = item.get("extra")
             behavior = item.get("behavior", "domain").strip().lower()
-            include_ipv6 = item.get("include_ipv6", True)
+            include_ipv6 = item.get("include_ipv6", False)
             out_dir = item.get("dir") or args.output_dir
             desc = item.get("description", "")
 
