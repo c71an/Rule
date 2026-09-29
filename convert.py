@@ -134,6 +134,10 @@ def filter_rules(content: str, filter_types: Set[str], behavior: str) -> List[st
         if not line or line.startswith("#"):
             continue
 
+        # 兼容经典 YAML/Surge 列表前缀，如 "- DOMAIN,example.com"
+        if line.startswith("- "):
+            line = line[2:].strip()
+
         parts = line.split(",")
         if len(parts) >= 2:
             rule_type = parts[0].strip().upper()

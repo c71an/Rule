@@ -1,6 +1,6 @@
-#幼儿园
-+.7kid.com
-#SteamCN
-steamcdn-a.akamaihd.net
-+.cm.steampowered.com
-+.steamserver.net
+# 幼儿园
+- DOMAIN-SUFFIX,7kid.com
+# SteamCN
+- DOMAIN,steamcdn-a.akamaihd.net
+- DOMAIN-SUFFIX,cm.steampowered.com
+- DOMAIN-SUFFIX,steamserver.net

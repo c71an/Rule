@@ -113,12 +113,14 @@ rules:
 
 ### 2. 自定义规则文件格式
 
-在 `config/cn-extra.list` 中支持多种格式，支持注释（`#` 开头）：
+在 `config/cn-extra.list` 中支持与上游一致的经典格式，支持注释（`#` 开头），编译时会自动与上游规则一并转换为紧凑短格式（如 `+.xxx`）：
 ```text
-# 自定义国内域名
-+.7kid.com
-steamcdn-a.akamaihd.net
-DOMAIN-SUFFIX,example.cn
+# 幼儿园
+- DOMAIN-SUFFIX,7kid.com
+# SteamCN
+- DOMAIN,steamcdn-a.akamaihd.net
+- DOMAIN-SUFFIX,cm.steampowered.com
+- DOMAIN-SUFFIX,steamserver.net
 ```
 
 ### 3. 在 `config/rules.json` 中配置
