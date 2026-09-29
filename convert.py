@@ -155,24 +155,12 @@ def filter_rules(content: str, filter_types: Set[str], behavior: str) -> List[st
     return sorted(rules_set)
 
 
-def parse_extra_rules(filepath: str, filter_types: Set[str], behavior: str) -> List[str]:
-    """
-    解析本地额外的自定义规则文件（如 config/cn-extra.list）。
-    与主过滤器保持完全一致的类型与注释处理。
-    """
+def load_file_content(filepath: str) -> str:
+    """读取本地文件内容"""
     if not os.path.isfile(filepath):
-        return []
-
+        return ""
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-        clean_lines = []
-        for raw_line in f:
-            line = raw_line.strip()
-            # 彻底去除整行与行内注释（支持 #, //, ;）
-            line = line.split("#")[0].split("//")[0].split(";")[0].strip()
-            if line:
-                clean_lines.append(line)
-
-    return filter_rules("\n".join(clean_lines), filter_types, behavior)
+        return f.read()
 
 
 def find_extra_file(extra_setting: Optional[str], target_name: str, config_dir: str) -> Optional[str]:
@@ -336,21 +324,19 @@ def main():
                     upstream, specified_file=specified_file, custom_url=custom_url
                 )
 
-                filtered_rules = filter_rules(content, filter_types, behavior)
-                upstream_count = len(filtered_rules)
-
-                # 检查并解析自定义额外规则
+                # 检查并读取自定义额外规则
                 extra_file = find_extra_file(extra_setting, target, config_dir)
-                extra_rules = []
+                extra_content = ""
                 if extra_file:
-                    extra_rules = parse_extra_rules(extra_file, filter_types, behavior)
-                    print(f"    [+] 合并额外自定义规则: {len(extra_rules)} 条 (来源: {extra_file})")
+                    extra_content = load_file_content(extra_file)
+                    print(f"    [+] 载入自定义规则文件: {extra_file}")
 
-                # 合并上游规则与自定义额外规则
-                final_rules = sorted(set(filtered_rules) | set(extra_rules))
+                # 统一合并原始内容，执行过滤并转为短格式
+                combined_content = f"{content}\n{extra_content}" if extra_content else content
+                final_rules = filter_rules(combined_content, filter_types, behavior)
                 rule_count = len(final_rules)
 
-                print(f"    来源: {source_desc} | 上游规则: {upstream_count} 条 | 最终去重合并总规则数: {rule_count}")
+                print(f"    来源: {source_desc} | 最终去重合并总规则数: {rule_count}")
 
                 if rule_count == 0:
                     print("    [!] 警告: 未提取到任何有效规则，跳过生成")

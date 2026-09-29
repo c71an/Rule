@@ -113,7 +113,7 @@ rules:
 
 ### 2. 自定义规则文件格式
 
-在 `config/cn-extra.list` 中使用与上游一致的经典标准格式，支持注释（`#` 开头），编译时会自动标准化转为短格式（紧凑 Trie 树）：
+在 `config/cn-extra.list` 中与上游保持一致的经典格式，支持注释（`#` 开头），编译时会自动与上游规则一并转为紧凑短格式（如 `+.7kid.com`）：
 ```text
 # 幼儿园
 DOMAIN-SUFFIX,7kid.com
