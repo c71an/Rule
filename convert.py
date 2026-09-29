@@ -94,40 +94,24 @@ def parse_filter_config(filter_val: Optional[Union[str, List[str]]]) -> Set[str]
     return {x.strip().upper() for x in str(filter_val).split(",") if x.strip()}
 
 
-def determine_behavior(filter_types: Set[str], explicit_behavior: Optional[str] = None) -> str:
-    """根据 filter_types 或分组设置推导 Mihomo 的 behavior（domain 或 ipcidr）"""
-    if explicit_behavior:
-        return explicit_behavior.strip().lower()
-    if any("IP" in f or "CIDR" in f for f in filter_types):
-        return "ipcidr"
-    return "domain"
-
-
 def load_rule_configs(raw_data: Union[Dict, List]) -> List[Dict]:
     """
-    加载规则配置，支持两种 JSON 格式：
-    1. 分类分组结构（推荐）：
-       {
-         "domain": [ ... ],
-         "ipcidr": [ ... ]
-       }
-    2. 单层列表结构（兼容旧版）：
-       [ ... ]
+    加载 rules.json 配置：
+    按分组名（如 'domain'、'ipcidr'）直接赋予各条目 behavior，
+    若提供扁平列表则直接读取。
     """
     flat_configs = []
-    if isinstance(raw_data, list):
-        for item in raw_data:
-            flat_configs.append(dict(item))
-    elif isinstance(raw_data, dict):
+    if isinstance(raw_data, dict):
         for group_name, items in raw_data.items():
-            group_behavior = group_name.strip().lower()
+            behavior = group_name.strip().lower()
             if isinstance(items, list):
                 for item in items:
                     item_copy = dict(item)
-                    # 若条目未显式指定 behavior，使用所在组的类别名
-                    if "behavior" not in item_copy:
-                        item_copy["behavior"] = group_behavior
+                    item_copy["behavior"] = item_copy.get("behavior", behavior)
                     flat_configs.append(item_copy)
+    elif isinstance(raw_data, list):
+        for item in raw_data:
+            flat_configs.append(dict(item))
     return flat_configs
 
 
@@ -212,18 +196,11 @@ def parse_extra_rules(filepath: str, filter_types: Set[str], behavior: str) -> L
 
 def find_extra_file(extra_setting: Optional[str], target_name: str, config_dir: str) -> Optional[str]:
     """定位额外规则文件的路径"""
-    candidates = []
-    if extra_setting:
-        candidates.append(extra_setting)
-        candidates.append(os.path.join(config_dir, extra_setting))
-        candidates.append(os.path.join(".", extra_setting))
-
-    # 默认按约定自动探测：config/{target}-extra.list 或 config/{target}-extra.txt
-    candidates.append(os.path.join(config_dir, f"{target_name}-extra.list"))
-    candidates.append(f"{target_name}-extra.list")
-    candidates.append(os.path.join(config_dir, f"{target_name}-extra.txt"))
-    candidates.append(f"{target_name}-extra.txt")
-
+    filename = extra_setting or f"{target_name}-extra.list"
+    candidates = [
+        os.path.join(config_dir, filename),
+        filename,
+    ]
     for path in candidates:
         if path and os.path.isfile(path):
             return os.path.abspath(path)
@@ -363,19 +340,15 @@ def main():
             specified_file = item.get("file")
             extra_setting = item.get("extra")
             filter_val = item.get("filter")
-            explicit_behavior = item.get("behavior")
             out_dir = item.get("dir") or args.output_dir
-            desc = item.get("description", "")
-
+            behavior = (item.get("behavior") or "domain").strip().lower()
             filter_types = parse_filter_config(filter_val)
-            behavior = determine_behavior(filter_types, explicit_behavior)
             filter_desc = ",".join(sorted(filter_types))
 
             target_mrs_filename = f"{target}.mrs"
             target_mrs_path = os.path.join(out_dir, target_mrs_filename)
 
-            desc_str = f" ({desc})" if desc else ""
-            print(f"[{idx}/{len(rule_configs)}] 处理 ({behavior}) [{filter_desc}]: {upstream} -> {target_mrs_path}{desc_str}")
+            print(f"[{idx}/{len(rule_configs)}] 处理 ({behavior}) [{filter_desc}]: {upstream} -> {target_mrs_path}")
 
             try:
                 content, source_desc = fetch_upstream_rule_content(
