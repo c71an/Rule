@@ -123,23 +123,36 @@ DOMAIN-SUFFIX,example.cn
 
 ### 3. 在 `config/rules.json` 中配置
 
+规则配置已划分为 `domain`（域名类）与 `ipcidr`（IP类）两组：
+
 ```json
-[
-  {
-    "upstream": "ChinaMax",
-    "target": "cn",
-    "extra": "cn-extra.list",
-    "description": "中国大陆域名分流规则合集 (ChinaMax)"
-  }
-]
+{
+  "domain": [
+    {
+      "upstream": "ChinaMax",
+      "target": "cn",
+      "extra": "cn-extra.list",
+      "description": "中国大陆域名分流规则合集 (ChinaMax)"
+    }
+  ],
+  "ipcidr": [
+    {
+      "upstream": "ChinaMax",
+      "target": "cn_ip",
+      "filter": "IP-CIDR",
+      "file": "ChinaMax.list",
+      "description": "中国大陆 IPv4 网段规则 (ChinaMax IP-CIDR)"
+    }
+  ]
+}
 ```
 
+- **`domain` 分组**：属于域名类分流规则，默认提取 `DOMAIN` 与 `DOMAIN-SUFFIX` 并自动转为紧凑 Trie 树。
+- **`ipcidr` 分组**：属于 IP 网段分流规则，可通过 `filter` 精准控制提取内容：
+  - `"filter": "IP-CIDR"`：仅提取纯 IPv4 网段（默认）；
+  - `"filter": "IP-CIDR,IP-CIDR6"`：同时提取 IPv4 与 IPv6 双栈网段。
 - **`upstream`**: 上游规则分类名称（对应 `blackmatrix7/ios_rule_script` 中的规则目录名）。
 - **`target`**: 编译输出的 `.mrs` 文件名（例如 `"cn"` 会生成 `cn.mrs`，`"cn_ip"` 会生成 `cn_ip.mrs`）。
-- **`filter`** *(可选)*: 指定提取的规则类型（自动推导 Mihomo 的 `behavior` 类型）：
-  - 默认未填时：`"DOMAIN,DOMAIN-SUFFIX"`（推导为 `domain` 类型，并自动转为紧凑 Trie 格式）
-  - `"IP-CIDR"`：仅提取纯 IPv4 网段（推导为 `ipcidr` 类型）
-  - `"IP-CIDR,IP-CIDR6"`：同时提取 IPv4 与 IPv6 网段（推导为 `ipcidr` 类型）
 - **`extra`** *(可选)*: 本地自定义补充规则文件名（如 `"cn-extra.list"`），自动与上游规则去重合并。
 - **`file`** *(可选)*: 指定上游文件名（默认优先探测 `{upstream}_All.list`，不存在则使用 `{upstream}.list`）。
 - **`url`** *(可选)*: 自定义任意规则源的完整 URL。

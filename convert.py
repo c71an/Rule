@@ -79,14 +79,18 @@ def fetch_upstream_rule_content(
     raise FileNotFoundError(f"无法在上游找到规则 {rule_name} 的任何候选文件: {candidate_files}")
 
 
-def parse_filter_config(filter_val: Optional[Union[str, List[str]]]) -> Set[str]:
+def parse_filter_config(filter_val: Optional[Union[str, List[str]]], default_behavior: str = "domain") -> Set[str]:
     """
     解析 filter 配置项，返回规范化大写的规则集合：
-    - 未指定时默认: {'DOMAIN', 'DOMAIN-SUFFIX'}
+    - 未指定时根据所在分组行为决定默认值：
+        - domain: {'DOMAIN', 'DOMAIN-SUFFIX'}
+        - ipcidr: {'IP-CIDR'} (纯 IPv4)
     - "IP-CIDR": 仅 IPv4
-    - "IP-CIDR,IP-CIDR6": IPv4 和 IPv6
+    - "IP-CIDR,IP-CIDR6": IPv4 和 IPv6 双栈
     """
     if not filter_val:
+        if default_behavior == "ipcidr":
+            return {"IP-CIDR"}
         return {"DOMAIN", "DOMAIN-SUFFIX"}
     if isinstance(filter_val, list):
         return {str(x).strip().upper() for x in filter_val if str(x).strip()}
@@ -94,12 +98,40 @@ def parse_filter_config(filter_val: Optional[Union[str, List[str]]]) -> Set[str]
 
 
 def determine_behavior(filter_types: Set[str], explicit_behavior: Optional[str] = None) -> str:
-    """根据 filter_types 自动推导 Mihomo 的 behavior（domain 或 ipcidr）"""
+    """根据 filter_types 或分组设置推导 Mihomo 的 behavior（domain 或 ipcidr）"""
     if explicit_behavior:
         return explicit_behavior.strip().lower()
     if any("IP" in f or "CIDR" in f for f in filter_types):
         return "ipcidr"
     return "domain"
+
+
+def load_rule_configs(raw_data: Union[Dict, List]) -> List[Dict]:
+    """
+    加载规则配置，支持两种 JSON 格式：
+    1. 分类分组结构（推荐）：
+       {
+         "domain": [ ... ],
+         "ipcidr": [ ... ]
+       }
+    2. 单层列表结构（兼容旧版）：
+       [ ... ]
+    """
+    flat_configs = []
+    if isinstance(raw_data, list):
+        for item in raw_data:
+            flat_configs.append(dict(item))
+    elif isinstance(raw_data, dict):
+        for group_name, items in raw_data.items():
+            group_behavior = group_name.strip().lower()
+            if isinstance(items, list):
+                for item in items:
+                    item_copy = dict(item)
+                    # 若条目未显式指定 behavior，使用所在组的类别名
+                    if "behavior" not in item_copy:
+                        item_copy["behavior"] = group_behavior
+                    flat_configs.append(item_copy)
+    return flat_configs
 
 
 def filter_rules(content: str, filter_types: Set[str], behavior: str) -> List[str]:
@@ -298,7 +330,8 @@ def main():
         sys.exit(1)
 
     with open(config_path, "r", encoding="utf-8") as f:
-        rule_configs: List[Dict[str, str]] = json.load(f)
+        raw_config = json.load(f)
+    rule_configs: List[Dict[str, str]] = load_rule_configs(raw_config)
 
     # 收集当前合法的目标文件与涉及的输出目录
     valid_target_files = set()
@@ -337,8 +370,9 @@ def main():
             out_dir = item.get("dir") or args.output_dir
             desc = item.get("description", "")
 
-            # 解析 filter 与推断 behavior
-            filter_types = parse_filter_config(filter_val)
+            # 解析所属分组行为并推导 filter 与 behavior
+            default_beh = (explicit_behavior or "domain").strip().lower()
+            filter_types = parse_filter_config(filter_val, default_behavior=default_beh)
             behavior = determine_behavior(filter_types, explicit_behavior)
             filter_desc = ",".join(sorted(filter_types))
 
