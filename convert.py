@@ -134,10 +134,6 @@ def filter_rules(content: str, filter_types: Set[str], behavior: str) -> List[st
         if not line or line.startswith("#"):
             continue
 
-        # 兼容经典 YAML/Surge 列表前缀，如 "- DOMAIN,example.com"
-        if line.startswith("- "):
-            line = line[2:].strip()
-
         parts = line.split(",")
         if len(parts) >= 2:
             rule_type = parts[0].strip().upper()
@@ -155,25 +151,6 @@ def filter_rules(content: str, filter_types: Set[str], behavior: str) -> List[st
                         rules_set.add(f"+.{payload}")
                     elif rule_type == "DOMAIN":
                         rules_set.add(payload)
-        else:
-            # 处理纯规则行（兼容 extra 规则或非逗号格式）
-            if behavior == "ipcidr":
-                if "/" in line:
-                    is_v6 = ":" in line
-                    if is_v6 and include_v6:
-                        rules_set.add(line)
-                    elif not is_v6 and include_v4:
-                        rules_set.add(line)
-            else:
-                if line.startswith("+."):
-                    if "DOMAIN-SUFFIX" in filter_types:
-                        rules_set.add(line)
-                elif line.startswith("."):
-                    if "DOMAIN-SUFFIX" in filter_types:
-                        rules_set.add(f"+{line}")
-                else:
-                    if "DOMAIN" in filter_types:
-                        rules_set.add(line)
 
     return sorted(rules_set)
 
